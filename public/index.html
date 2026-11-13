@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MentorAI Kelas - PBL & PjBL</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, doc, setDoc, getDoc, updateDoc, onSnapshot, collection, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        window.firebaseModules = { initializeApp, getFirestore, doc, setDoc, getDoc, updateDoc, onSnapshot, collection, getDocs, query, where };
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+    <header class="bg-indigo-700 text-white shadow-md py-4 px-6 flex justify-between items-center">
+        <div class="flex items-center space-x-3">
+            <span class="text-2xl">🤖</span>
+            <div>
+                <h1 class="text-xl font-bold">MentorAI Kelas</h1>
+                <p class="text-xs text-indigo-200">Platform Pembelajaran PBL & PjBL Berbasis AI</p>
+            </div>
+        </div>
+        <div id="userInfoHeader" class="text-sm font-medium bg-indigo-800 px-3 py-1.5 rounded-lg hidden">
+            <span id="displayRoleText">Peran: -</span> | <span id="displayNameText">-</span>
+        </div>
+    </header>
+
+    <main class="flex-grow container mx-auto p-4 max-w-5xl">
+        <div id="screenRoleSelection" class="max-w-md mx-auto mt-12 bg-white p-8 rounded-2xl shadow-xl border border-slate-100">
+            <h2 class="text-2xl font-bold text-slate-900 mb-2 text-center">Selamat Datang</h2>
+            <p class="text-sm text-slate-500 mb-6 text-center">Silakan pilih peran Anda untuk mulai menggunakan aplikasi.</p>
+            <div class="space-y-4">
+                <button onclick="showRoleForm('guru')" class="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl shadow transition flex items-center justify-center space-x-2">
+                    <span>👨‍🏫 Masuk sebagai Guru / Pembuat Kelas</span>
+                </button>
+                <button onclick="showRoleForm('siswa')" class="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl shadow transition flex items-center justify-center space-x-2">
+                    <span>🎓 Masuk sebagai Siswa</span>
+                </button>
+            </div>
+            <div class="mt-8 pt-6 border-t border-slate-200">
+                <details class="text-xs text-slate-500">
+                    <summary class="cursor-pointer font-medium text-indigo-600 hover:underline">⚙️ Pengaturan Firebase (Klik untuk Setup)</summary>
+                    <div class="mt-3 space-y-2">
+                        <p>Masukkan konfigurasi Firebase Firestore:</p>
+                        <textarea id="inputFirebaseConfig" rows="4" class="w-full p-2 border rounded font-mono text-[10px]" placeholder='{ apiKey: "...", projectId: "..." }'></textarea>
+                        <button onclick="saveFirebaseConfig()" class="px-3 py-1 bg-slate-800 text-white rounded text-xs">Simpan Konfigurasi</button>
+                    </div>
+                </details>
+            </div>
+        </div>
+
+        <div id="formGuru" class="max-w-md mx-auto mt-12 bg-white p-8 rounded-2xl shadow-xl border border-slate-100 hidden">
+            <h2 class="text-xl font-bold text-slate-900 mb-4">Panel Akses Guru</h2>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Nama Guru</label>
+                    <input type="text" id="inputNamaGuru" class="w-full p-3 border rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="Cth: Bpk. Budi, M.Pd">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Kode Kelas (6 Karakter)</label>
+                    <div class="flex space-x-2">
+                        <input type="text" id="inputKodeKelasGuru" class="w-full p-3 border rounded-xl uppercase font-mono tracking-wider focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="Cth: KLS84A">
+                        <button onclick="generateRandomCode()" class="px-4 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-semibold">Acak</button>
+                    </div>
+                </div>
+                <button onclick="loginAsGuru()" class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl shadow transition">Buka / Buat Kelas</button>
+                <button onclick="backToRoleSelection()" class="w-full py-2 text-slate-500 hover:text-slate-700 text-sm">Kembali</button>
+            </div>
+        </div>
+
+        <div id="formSiswa" class="max-w-md mx-auto mt-12 bg-white p-8 rounded-2xl shadow-xl border border-slate-100 hidden">
+            <h2 class="text-xl font-bold text-slate-900 mb-4">Masuk Ruang Belajar Siswa</h2>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Nama Lengkap Siswa</label>
+                    <input type="text" id="inputNamaSiswa" class="w-full p-3 border rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="Cth: Siti Aminah">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Kelompok (Opsional)</label>
+                    <input type="text" id="inputKelompokSiswa" class="w-full p-3 border rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="Cth: Kelompok 1">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Kode Kelas dari Guru</label>
+                    <input type="text" id="inputKodeKelasSiswa" class="w-full p-3 border rounded-xl uppercase font-mono tracking-wider focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="Cth: KLS84A">
+                </div>
+                <button onclick="loginAsSiswa()" class="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl shadow transition">Gabung ke Kelas</button>
+                <button onclick="backToRoleSelection()" class="w-full py-2 text-slate-500 hover:text-slate-700 text-sm">Kembali</button>
+            </div>
+        </div>
+
+        <div id="dashboardGuru" class="hidden space-y-6">
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                    <span class="text-xs font-bold text-indigo-600 uppercase tracking-wider">Dashboard Guru</span>
+                    <h2 class="text-2xl font-bold text-slate-900" id="labelInfoKelasGuru">Kelas: -</h2>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <div class="bg-indigo-50 border border-indigo-200 px-4 py-2 rounded-xl text-sm">
+                        Kode Kelas: <strong id="badgeKodeKelas" class="font-mono text-indigo-700 text-base">---</strong>
+                    </div>
+                    <button onclick="logout()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm font-semibold">Keluar</button>
+                </div>
+            </div>
+
+            <div class="flex space-x-2 border-b border-slate-200">
+                <button onclick="switchTabGuru('acuan')" id="tabBtnAcuan" class="py-2.5 px-4 font-semibold text-sm border-b-2 border-indigo-600 text-indigo-600">📝 Acuan Pembelajaran & Tugas</button>
+                <button onclick="switchTabGuru('siswa')" id="tabBtnSiswa" class="py-2.5 px-4 font-semibold text-sm text-slate-500 hover:text-slate-700">👥 Pantauan Siswa & Laporan</button>
+            </div>
+
+            <div id="tabContentAcuan" class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4">
+                <h3 class="text-lg font-bold text-slate-900">Pengaturan Acuan & Masalah Pemantik</h3>
+                <p class="text-sm text-slate-500">Tentukan metode, materi pokok, dan tantangan masalah yang akan dipelajari oleh seluruh siswa di kelas ini.</p>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Metode Pembelajaran</label>
+                        <select id="selectMetode" class="w-full p-3 border rounded-xl bg-white focus:ring-2 focus:ring-indigo-500 outline-none">
+                            <option value="PBL">PBL (Problem Based Learning)</option>
+                            <option value="PjBL">PjBL (Project Based Learning)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Topik Utama</label>
+                        <input type="text" id="inputTopik" class="w-full p-3 border rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="Cth: Pencemaran Lingkungan">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Materi Pokok / Acuan Belajar</label>
+                    <textarea id="inputMateriAcuan" rows="4" class="w-full p-3 border rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="Tuliskan teori atau ringkasan materi..."></textarea>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Permasalahan / Tantangan Proyek</label>
+                    <textarea id="inputMasalah" rows="3" class="w-full p-3 border rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="Tuliskan studi kasus..."></textarea>
+                </div>
+                <div class="flex justify-between items-center pt-2">
+                    <div class="space-x-2">
+                        <button onclick="loadTemplate('PBL')" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-semibold text-slate-600">Isi Contoh PBL</button>
+                        <button onclick="loadTemplate('PjBL')" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-semibold text-slate-600">Isi Contoh PjBL</button>
+                    </div>
+                    <button onclick="simpanAcuanGuru()" class="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl shadow transition">Simpan & Kirim ke Siswa</button>
+                </div>
+            </div>
+
+            <div id="tabContentSiswa" class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hidden space-y-4">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <h3 class="text-lg font-bold text-slate-900">Daftar Siswa & Laporan Belajar</h3>
+                        <p class="text-sm text-slate-500">Pantau progres diskusi dan hasil evaluasi belajar tiap siswa secara real-time.</p>
+                    </div>
+                    <button onclick="refreshDaftarSiswa()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold">🔄 Muat Ulang</button>
+                </div>
+                <div id="containerDaftarSiswa" class="space-y-3">
+                    <p class="text-sm text-slate-400 text-center py-6">Memuat daftar siswa...</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="dashboardSiswa" class="hidden space-y-4">
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+                <div>
+                    <span class="text-xs font-bold text-emerald-600 uppercase tracking-wider" id="labelSiswaInfoKelas">Kelas: -</span>
+                    <h2 class="text-xl font-bold text-slate-900" id="labelSiswaNama">-</h2>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <button onclick="selesaiBelajarSiswa()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl text-sm shadow">🏁 Selesai Belajar & Kirim Laporan</button>
+                    <button onclick="logout()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm font-semibold">Keluar</button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 space-y-3 md:col-span-1">
+                    <h3 class="font-bold text-slate-900 text-sm flex items-center space-x-2">
+                        <span>📌</span><span>Acuan Pembelajaran Guru</span>
+                    </h3>
+                    <div id="siswaBoxAcuan" class="text-xs space-y-2 text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-100 max-h-[400px] overflow-y-auto">
+                        <p class="italic text-slate-400">Menunggu guru mempublikasikan acuan...</p>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col h-[550px] md:col-span-2">
+                    <div class="border-b pb-3 mb-3 flex items-center justify-between">
+                        <div class="flex items-center space-x-2">
+                            <div class="w-3 h-3 bg-emerald-500 rounded-full animate-pulse"></div>
+                            <span class="font-bold text-slate-900 text-sm">MentorAI (Sokratik & Pembimbing)</span>
+                        </div>
+                        <span class="text-[11px] text-slate-400">Diskusi & Tanya Jawab</span>
+                    </div>
+
+                    <div id="chatMessages" class="flex-grow overflow-y-auto space-y-3 pr-2 text-sm">
+                        <div class="bg-indigo-50 text-indigo-900 p-3 rounded-xl rounded-tl-none border border-indigo-100">
+                            Halo! Silakan baca acuan guru di sebelah kiri, lalu mulailah bertanya atau berdiskusi dengan saya.
+                        </div>
+                    </div>
+
+                    <div class="mt-3 pt-3 border-t flex space-x-2">
+                        <input type="text" id="inputChatSiswa" onkeypress="handleChatKey(event)" class="flex-grow p-3 border rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="Ketik pertanyaan atau jawaban...">
+                        <button onclick="kirimPesanSiswa()" class="px-5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl text-sm transition">Kirim</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="modalLaporan" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden items-center justify-center p-4 z-50">
+            <div class="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-100 overflow-hidden flex flex-col max-h-[90vh]">
+                <div class="p-4 bg-indigo-700 text-white flex justify-between items-center">
+                    <h3 id="modalLaporanTitle" class="font-bold text-lg">Laporan Evaluasi Siswa</h3>
+                    <button onclick="closeModalLaporan()" class="text-white hover:text-slate-200 text-lg font-bold px-2">✕</button>
+                </div>
+                <div id="modalLaporanContent" class="p-6 overflow-y-auto space-y-4 text-sm text-slate-700"></div>
+                <div class="p-4 bg-slate-50 border-t flex justify-end">
+                    <button onclick="closeModalLaporan()" class="px-4 py-2 bg-slate-800 text-white rounded-xl text-xs font-semibold">Tutup</button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        let currentRole = null;
+        let currentUserData = null;
+        let currentClassCode = null;
+        let currentChatHistory = [];
+        let unsubscribeKelas = null;
+        let unsubscribeSiswa = null;
+
+        let firebaseConfig = {
+            apiKey: "AIzaSyDummyKey",
+            authDomain: "mentorai-pbl.firebaseapp.com",
+            projectId: "mentorai-pbl",
+            storageBucket: "mentorai-pbl.appspot.com",
+            messagingSenderId: "123",
+            appId: "1:123"
+        };
+
+        let db = null;
+        let fbModules = null;
+
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedConfig = localStorage.getItem('mentorai_fb_config');
+            if (savedConfig) {
+                try {
+                    firebaseConfig = JSON.parse(savedConfig);
+                    document.getElementById('inputFirebaseConfig').value = savedConfig;
+                } catch(e) {}
+            }
+            initFirebase();
+        });
+
+        function saveFirebaseConfig() {
+            const val = document.getElementById('inputFirebaseConfig').value.trim();
+            try {
+                const parsed = eval('(' + val + ')');
+                if (parsed.projectId) {
+                    localStorage.setItem('mentorai_fb_config', val);
+                    alert('Konfigurasi Firebase berhasil disimpan! Memuat ulang...');
+                    location.reload();
+                } else {
+                    alert('projectId tidak ditemukan.');
+                }
+            } catch(e) {
+                alert('Format salah: ' + e.message);
+            }
+        }
+
+        async function initFirebase() {
+            if (!window.firebaseModules) {
+                setTimeout(initFirebase, 500);
+                return;
+            }
+            fbModules = window.firebaseModules;
+            try {
+                const app = fbModules.initializeApp(firebaseConfig);
+                db = fbModules.getFirestore(app);
+            } catch(e) {
+                console.warn('Firebase init warning:', e);
+            }
+        }
+
+        function showRoleForm(role) {
+            document.getElementById('screenRoleSelection').classList.add('hidden');
+            if (role === 'guru') document.getElementById('formGuru').classList.remove('hidden');
+            else document.getElementById('formSiswa').classList.remove('hidden');
+        }
+
+        function backToRoleSelection() {
+            document.getElementById('formGuru').classList.add('hidden');
+            document.getElementById('formSiswa').classList.add('hidden');
+            document.getElementById('screenRoleSelection').classList.remove('hidden');
+        }
+
+        function generateRandomCode() {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+            let code = '';
+            for (let i = 0; i < 6; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
+            document.getElementById('inputKodeKelasGuru').value = code;
+        }
+
+        async function loginAsGuru() {
+            const nama = document.getElementById('inputNamaGuru').value.trim();
+            const kode = document.getElementById('inputKodeKelasGuru').value.trim().toUpperCase();
+            if (!nama || !kode) {
+                alert('Nama guru dan kode kelas wajib diisi!');
+                return;
+            }
+            currentRole = 'guru';
+            currentClassCode = kode;
+            currentUserData = { nama, kode };
+
+            document.getElementById('formGuru').classList.add('hidden');
+            document.getElementById('dashboardGuru').classList.remove('hidden');
+            document.getElementById('userInfoHeader').classList.remove('hidden');
+            document.getElementById('displayRoleText').innerText = 'Guru';
+            document.getElementById('displayNameText').innerText = nama;
+            document.getElementById('labelInfoKelasGuru').innerText = `Kelas: ${kode}`;
+            document.getElementById('badgeKodeKelas').innerText = kode;
+
+            if (db) {
+                try {
+                    const docRef = fbModules.doc(db, "kelas", kode);
+                    const docSnap = await fbModules.getDoc(docRef);
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
+                        document.getElementById('selectMetode').value = data.metode || 'PBL';
+                        document.getElementById('inputTopik').value = data.topik || '';
+                        document.getElementById('inputMateriAcuan').value = data.materiAcuan || '';
+                        document.getElementById('inputMasalah').value = data.masalah || '';
+                    } else {
+                        await fbModules.setDoc(docRef, {
+                            guru: nama, metode: 'PBL', topik: '', materiAcuan: '', masalah: '', createdAt: new Date().toISOString()
+                        });
+                    }
+                } catch(e) {}
+            }
+            refreshDaftarSiswa();
+        }
+
+        function loadTemplate(tipe) {
+            if (tipe === 'PBL') {
+                document.getElementById('selectMetode').value = 'PBL';
+                document.getElementById('inputTopik').value = 'Pencemaran Limbah Plastik di Aliran Sungai Desa Sukamaju';
+                document.getElementById('inputMateriAcuan').value = '1. Konsep ekosistem perairan dan parameter pencemaran air.\n2. Sumber mikroplastik dan dampaknya.\n3. Prinsip 3R (Reduce, Reuse, Recycle).';
+                document.getElementById('inputMasalah').value = 'Warga melaporkan tumpukan sampah plastik menyumbat saluran irigasi. Analisislah penyebab dan rumuskan solusinya!';
+            } else {
+                document.getElementById('selectMetode').value = 'PjBL';
+                document.getElementById('inputTopik').value = 'Pembuatan Alat Penjernih Air Sederhana';
+                document.getElementById('inputMateriAcuan').value = '1. Sifat fisik dan kimia air bersih.\n2. Fungsi filtrasi menggunakan ijuk, kerikil, pasir, dan arang.';
+                document.getElementById('inputMasalah').value = 'Rancanglah purwarupa alat penjernih air sederhana dengan memanfaatkan bahan di sekitar.';
+            }
+        }
+
+        async function simpanAcuanGuru() {
+            const metode = document.getElementById('selectMetode').value;
+            const topik = document.getElementById('inputTopik').value.trim();
+            const materiAcuan = document.getElementById('inputMateriAcuan').value.trim();
+            const masalah = document.getElementById('inputMasalah').value.trim();
+
+            if (!topik || !materiAcuan) {
+                alert('Topik dan Materi Pokok Acuan wajib diisi.');
+                return;
+            }
+
+            if (db) {
+                try {
+                    const docRef = fbModules.doc(db, "kelas", currentClassCode);
+                    await fbModules.updateDoc(docRef, { metode, topik, materiAcuan, masalah });
+                    alert('Acuan pembelajaran berhasil disimpan dan disiarkan ke seluruh siswa!');
+                } catch(e) {
+                    alert('Gagal menyimpan: ' + e.message);
+                }
+            } else {
+                alert('Berhasil disimpan (Mode Lokal).');
+            }
+        }
+
+        function switchTabGuru(tab) {
+            const btnAcuan = document.getElementById('tabBtnAcuan');
+            const btnSiswa = document.getElementById('tabBtnSiswa');
+            const contentAcuan = document.getElementById('tabContentAcuan');
+            const contentSiswa = document.getElementById('tabContentSiswa');
+
+            if (tab === 'acuan') {
+                btnAcuan.className = "py-2.5 px-4 font-semibold text-sm border-b-2 border-indigo-600 text-indigo-600";
+                btnSiswa.className = "py-2.5 px-4 font-semibold text-sm text-slate-500 hover:text-slate-700";
+                contentAcuan.classList.remove('hidden');
+                contentSiswa.classList.add('hidden');
+            } else {
+                btnSiswa.className = "py-2.5 px-4 font-semibold text-sm border-b-2 border-indigo-600 text-indigo-600";
+                btnAcuan.className = "py-2.5 px-4 font-semibold text-sm text-slate-500 hover:text-slate-700";
+                contentSiswa.classList.remove('hidden');
+                contentAcuan.classList.add('hidden');
+                refreshDaftarSiswa();
+            }
+        }
+
+        async function refreshDaftarSiswa() {
+            const container = document.getElementById('containerDaftarSiswa');
+            container.innerHTML = '<p class="text-sm text-slate-400 text-center py-4">Memuat data siswa...</p>';
+            if (!db) {
+                container.innerHTML = '<p class="text-sm text-slate-500 text-center py-4">Mode demo lokal.</p>';
+                return;
+            }
+
+            try {
+                const q = fbModules.query(fbModules.collection(db, "siswa"), fbModules.where("kodeKelas", "==", currentClassCode));
+                const querySnapshot = await fbModules.getDocs(q);
+                if (querySnapshot.empty) {
+                    container.innerHTML = '<p class="text-sm text-slate-400 text-center py-6">Belum ada siswa yang bergabung.</p>';
+                    return;
+                }
+
+                let html = '<div class="divide-y divide-slate-100">';
+                querySnapshot.forEach((docSnap) => {
+                    const s = docSnap.data();
+                    const statusBadge = s.status === 'selesai' 
+                        ? '<span class="px-2.5 py-1 bg-emerald-100 text-emerald-800 text-xs font-semibold rounded-full">Selesai</span>'
+                        : '<span class="px-2.5 py-1 bg-amber-100 text-amber-800 text-xs font-semibold rounded-full">Diskusi</span>';
+
+                    html += `
+                        <div class="py-3 flex justify-between items-center">
+                            <div>
+                                <h4 class="font-bold text-slate-900">${s.nama} <span class="text-xs text-slate-500">(${s.kelompok || 'Individu'})</span></h4>
+                                <p class="text-xs text-slate-500">Interaksi: ${s.chatCount || 0}</p>
+                            </div>
+                            <div class="flex items-center space-x-3">
+                                ${statusBadge}
+                                <button onclick="bukaLaporanSiswa('${docSnap.id}')" class="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold rounded-lg text-xs">Lihat Laporan</button>
+                            </div>
+                        </div>
+                    `;
+                });
+                html += '</div>';
+                container.innerHTML = html;
+            } catch(e) {
+                container.innerHTML = '<p class="text-sm text-red-500 text-center py-4">Gagal memuat: ' + e.message + '</p>';
+            }
+        }
+
+        async function bukaLaporanSiswa(siswaId) {
+            const modal = document.getElementById('modalLaporan');
+            const title = document.getElementById('modalLaporanTitle');
+            const content = document.getElementById('modalLaporanContent');
+            title.innerText = 'Memuat Laporan...';
+            content.innerHTML = '<p class="text-center py-8 text-slate-400">Mengambil data...</p>';
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+
+            try {
+                const docSnap = await fbModules.getDoc(fbModules.doc(db, "siswa", siswaId));
+                if (!docSnap.exists()) return;
+                const s = docSnap.data();
+                title.innerText = `Laporan: ${s.nama}`;
+                content.innerHTML = `
+                    <div><strong>Status:</strong> ${s.status}</div>
+                    <div><strong>Laporan AI:</strong><br><div class="bg-indigo-50 p-3 rounded mt-1">${s.laporanEvaluasi || 'Belum selesai'}</div></div>
+                `;
+            } catch(e) {}
+        }
+
+        function closeModalLaporan() {
+            document.getElementById('modalLaporan').classList.add('hidden');
+            document.getElementById('modalLaporan').classList.remove('flex');
+        }
+
+        async function loginAsSiswa() {
+            const nama = document.getElementById('inputNamaSiswa').value.trim();
+            const kelompok = document.getElementById('inputKelompokSiswa').value.trim();
+            const kode = document.getElementById('inputKodeKelasSiswa').value.trim().toUpperCase();
+
+            if (!nama || !kode) {
+                alert('Nama dan kode kelas wajib diisi!');
+                return;
+            }
+
+            currentRole = 'siswa';
+            currentClassCode = kode;
+            currentUserData = { nama, kelompok, kode, id: `${kode}_${nama.replace(/\s+/g, '_')}` };
+
+            document.getElementById('formSiswa').classList.add('hidden');
+            document.getElementById('dashboardSiswa').classList.remove('hidden');
+            document.getElementById('userInfoHeader').classList.remove('hidden');
+            document.getElementById('displayRoleText').innerText = 'Siswa';
+            document.getElementById('displayNameText').innerText = nama;
+            document.getElementById('labelSiswaInfoKelas').innerText = `Kelas: ${kode}`;
+            document.getElementById('labelSiswaNama').innerText = `${nama} (${kelompok || 'Umum'})`;
+
+            if (db) {
+                try {
+                    await fbModules.setDoc(fbModules.doc(db, "siswa", currentUserData.id), {
+                        nama, kelompok, kodeKelas: kode, status: 'aktif', updatedAt: new Date().toISOString()
+                    }, { merge: true });
+                } catch(e) {}
+            }
+            muatAcuanSiswa();
+        }
+
+        async function muatAcuanSiswa() {
+            const box = document.getElementById('siswaBoxAcuan');
+            if (!db) return;
+            unsubscribeKelas = fbModules.onSnapshot(fbModules.doc(db, "kelas", currentClassCode), (docSnap) => {
+                if (docSnap.exists()) {
+                    const d = docSnap.data();
+                    window.currentAcuanKelas = d;
+                    box.innerHTML = `
+                        <div><strong>Metode:</strong> ${d.metode}</div>
+                        <div><strong>Topik:</strong> ${d.topik}</div>
+                        <div><strong>Materi:</strong><br>${d.materiAcuan}</div>
+                        <div><strong>Masalah:</strong><br>${d.masalah}</div>
+                    `;
+                }
+            });
+        }
+
+        function handleChatKey(e) { if (e.key === 'Enter') kirimPesanSiswa(); }
+
+        async function kirimPesanSiswa() {
+            const input = document.getElementById('inputChatSiswa');
+            const text = input.value.trim();
+            if (!text) return;
+            input.value = '';
+            appendChatMessage('user', text);
+            currentChatHistory.push({ role: 'user', parts: text });
+
+            const acuanData = window.currentAcuanKelas || { metode: 'PBL', topik: 'Umum' };
+            const systemInstruction = `MentorAI ${acuanData.metode}. Topik: ${acuanData.topik}. Acuan: ${acuanData.materiAcuan}. Masalah: ${acuanData.masalah}. Gunakan metode Sokratik (pandu dengan pertanyaan, jangan beri jawaban instan).`;
+
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: currentChatHistory, systemInstruction: { parts: [{ text: systemInstruction }] } })
+                });
+                const data = await response.json();
+                let reply = data.candidates?.[0]?.content?.parts?.[0]?.text || 'Gagal merespons.';
+                appendChatMessage('model', reply);
+                currentChatHistory.push({ role: 'model', parts: reply });
+
+                if (db && currentUserData) {
+                    await fbModules.setDoc(fbModules.doc(db, "siswa", currentUserData.id), {
+                        chatHistory: currentChatHistory, chatCount: currentChatHistory.length, updatedAt: new Date().toISOString()
+                    }, { merge: true });
+                }
+            } catch(e) {
+                appendChatMessage('model', 'Error koneksi.');
+            }
+        }
+
+        function appendChatMessage(role, text) {
+            const container = document.getElementById('chatMessages');
+            const isUser = role === 'user';
+            container.innerHTML += `
+                <div class="${isUser ? 'flex justify-end' : 'flex justify-start'}">
+                    <div class="max-w-[85%] p-3 rounded-xl text-sm ${isUser ? 'bg-emerald-600 text-white rounded-tr-none ml-auto' : 'bg-indigo-50 text-indigo-900 rounded-tl-none border'} whitespace-pre-line">
+                        ${text}
+                    </div>
+                </div>
+            `;
+            container.scrollTop = container.scrollHeight;
+        }
+
+        async function selesaiBelajarSiswa() {
+            if (!confirm('Selesaikan sesi dan kirim laporan ke Guru?')) return;
+            if (db && currentUserData) {
+                await fbModules.setDoc(fbModules.doc(db, "siswa", currentUserData.id), {
+                    status: 'selesai', laporanEvaluasi: 'Siswa aktif berdiskusi dan menyelesaikan sesi.', updatedAt: new Date().toISOString()
+                }, { merge: true });
+            }
+            alert('Laporan terkirim!');
+            logout();
+        }
+
+        function logout() {
+            if (unsubscribeKelas) unsubscribeKelas();
+            location.reload();
+        }
+    </script>
+</body>
+</html>
